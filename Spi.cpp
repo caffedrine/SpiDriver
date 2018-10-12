@@ -6,6 +6,8 @@
 #include <cstdio>
 #include <exception>
 #include <cstring>
+#include <thread>
+
 #include "Spi.h"
 
 Spi::Spi(const char *dev, bool auto_read)
@@ -24,15 +26,21 @@ Spi::Spi(const char *dev, bool auto_read)
 	/* Default settings */
 	this->SetBits(8);
 	this->SetSpeedHz(500000);
+	/*Default mode */
+	uint8_t mode = 0b00000000;
+	//mode |= Spi::MODE_BIT::THREE_WIRE;
+	mode |= Spi::MODE_BIT::NO_CS;
+	this->SetMode(mode);
 }
 
 Spi::~Spi()
 {
+	this->BgThreadCancelToken = true;
 	close(spifd);
 	spifd = 0;
 }
 
-int Spi::Write(char *data, int len)
+int Spi::Write(const char *data, const int len)
 {
 	struct spi_ioc_transfer xfer;
 	xfer.tx_buf = (unsigned long) data;
@@ -50,22 +58,19 @@ int Spi::Write(char *data, int len)
 	return 1;
 }
 
-void Spi::Read()
+int Spi::Read(const char *data, const int max_len)
 {
-	char buffer[this->RECV_BUFFER];
+	if( this->AutoRead == true )
+		throw Exception("Read", "Option to enable auto process of incoming data is enabled!");
 	
-	if( read(spifd, buffer, this->RECV_BUFFER) < 0 )
+	int bytes_read;
+	if( (bytes_read = read(spifd, RecvBuffer, max_len)) < 0 )
 	{
 		std::string desc = "read(): ";
 		desc += strerror(errno);
 		throw Exception(desc);
 	}
-	DataReceived(buffer);
-}
-
-void Spi::DataReceived(const char *data)
-{
-	std::cout << "RECV: " << data << std::endl;
+	return bytes_read;
 }
 
 int Spi::SetSocketBlockingEnabled(int fd, int blocking)
@@ -164,3 +169,32 @@ uint8_t Spi::SetMode(uint8_t mode)
 	return ModeSet;
 }
 
+void Spi::DataReceived(const char *data, const int length)
+{
+	std::cout << "RECV (" << length << " bytes): " << data << std::endl;
+//	for(int i = 0; i < length; i++)
+//		std::cout << "0x" << (int)data[i] << " ";
+//	std::cout << "\n";
+}
+
+void Spi::BackgroundWork()
+{
+	while( true )
+	{
+		if( this->BgThreadCancelToken == true )
+			break;
+
+		if(this->IsAvailable() > 0)
+		{
+			this->RecvBytes = (int)read(this->spifd, this->RecvBuffer, this->RECV_BUFFER_SIZE);
+
+			if( this->RecvBytes < 0 )
+				throw Exception("read", strerror(errno));
+			else if (this->RecvBytes > 0)
+			{
+				//sDataReceived(this->RecvBuffer, this->RecvBytes);
+			}
+		}
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
+}

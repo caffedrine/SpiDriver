@@ -13,11 +13,6 @@
 #include <linux/types.h>
 #include <linux/spi/spidev.h>
 
-enum class SPI_MODE
-{
-
-};
-
 class Spi
 {
 	struct Exception : public std::exception
@@ -30,13 +25,24 @@ class Spi
 	};
 	
 public:
-	const int RECV_BUFFER = 512;
+	enum MODE_BIT
+	{
+		CPHA 		= SPI_CPHA,
+		CPOL 		= SPI_CPOL,
+		CS_HIGH 	= SPI_CS_HIGH,
+		LSB_FIRST 	= SPI_LSB_FIRST,
+		THREE_WIRE	= SPI_3WIRE,
+		LOOP 		= SPI_LOOP,
+		NO_CS 		= SPI_NO_CS,
+		READY 		= SPI_READY
+	};
+	static const int RECV_BUFFER_SIZE = 64;
 	
 	Spi(const char *dev, bool AutoRead = false);
 	~Spi();
 	
-	int Write(char *data, int len);
-	void Read();
+	int Write(const char *data, int len);
+	int Read(const char *data, int max_len);
 	int IsAvailable();
 	
 	uint8_t GetMode();
@@ -46,14 +52,18 @@ public:
 	uint32_t SetSpeedHz(uint32_t speed);
 	uint32_t GetSpeedHz();
 	
-	
+	void BackgroundWork();
 protected:
-	virtual void DataReceived(const char *data);
+	virtual void DataReceived(const char *data, int len);
 	
 private:
 	int spifd;
 	unsigned baud, bits;
 	bool AutoRead = false;
+	int RecvBytes = 0;
+	char RecvBuffer[RECV_BUFFER_SIZE];
+	
+	bool BgThreadCancelToken = false;
 	
 	static int SetSocketBlockingEnabled(int fd, int blocking);
 };
