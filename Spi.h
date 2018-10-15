@@ -25,47 +25,58 @@ class Spi
 	};
 	
 public:
-	enum MODE_BIT
+	enum class BitOrder
 	{
-		CPHA 		= SPI_CPHA,
-		CPOL 		= SPI_CPOL,
-		CS_HIGH 	= SPI_CS_HIGH,
-		LSB_FIRST 	= SPI_LSB_FIRST,
-		THREE_WIRE	= SPI_3WIRE,
-		LOOP 		= SPI_LOOP,
-		NO_CS 		= SPI_NO_CS,
-		READY 		= SPI_READY
+		SPI_MSBFIRST,
+		SPI_LSBFIRST
 	};
-	static const int RECV_BUFFER_SIZE = 64;
+	static const int MAX_TRANSFER_SIZE = 8192;
 	
-	Spi(const char *dev, bool AutoRead = false);
+	Spi(const char *dev);
 	~Spi();
 	
-	int Write(const char *data, int len);
-	int Read(const char *data, int max_len);
+	int Write(const char *data, int n_words);
+	int Read(char *rx_buffer, int n_words);
+	/** Send then receive */
+	int Transaction(char *tx_data, int tx_n_words, char *rx_data, int rx_n_words);
+	/** Send and receive simultaneously */
+	int Transfer(char *tx_data, char *rx_data, char n_words);
+	
 	int IsAvailable();
 	
-	uint8_t GetMode();
-	uint8_t SetMode(uint8_t mode);
-	uint8_t SetBits(uint8_t bits);
-	uint8_t GetBits();
+	/* Spi settings */
+	uint8_t SetBitsPerWord(uint8_t s_bits);
+	uint8_t GetBitsPerWord();
 	uint32_t SetSpeedHz(uint32_t speed);
 	uint32_t GetSpeedHz();
+	
+	/* Modes settings */
+	uint8_t GetMode();
+	uint8_t SetMode(uint8_t mode);
+	int SetClockMode(uint8_t mode);
+	int GetClockMode();
+	int SetCSActiveLow();
+	int SetCSActiveHigh();
+	int EnableCS();
+	int DisableCS();
+	int EnableLoopback();
+	int DisableLoopback();
+	int Enable3Wire();
+	int Disable3Wire();
 	
 	void BackgroundWork();
 protected:
 	virtual void DataReceived(const char *data, int len);
 	
 private:
-	int spifd;
-	unsigned baud, bits;
+	uint8_t mode;
+	int spidev_fd;
 	bool AutoRead = false;
 	int RecvBytes = 0;
-	char RecvBuffer[RECV_BUFFER_SIZE];
+	char RecvBuffer[MAX_TRANSFER_SIZE];
 	
 	bool BgThreadCancelToken = false;
-	
-	static int SetSocketBlockingEnabled(int fd, int blocking);
+	int Words2Bytes(int words);
 };
 
 
